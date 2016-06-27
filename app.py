@@ -37,8 +37,10 @@ def get_fan(user_id):
 
 # 关注和粉丝计数
 def fan_follow_count(user):
-    user.follow_count = len(Follow.query.filter_by(user_id=user.id).all())
-    user.fan_count = len(Follow.query.filter_by(followed_id=user.id).all())
+    follow = Follow.query.filter_by(user_id=user.id).all()
+    fan = Follow.query.filter_by(followed_id=user.id).all()
+    user.follow_count = len(follow)
+    user.fan_count = len(fan)
     user.save()
     return True
 
