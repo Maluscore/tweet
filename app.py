@@ -50,7 +50,8 @@ def index():
     if current_user() is None:
         return redirect(url_for('login_view'))
     else:
-        return redirect(url_for('timeline_view', username=current_user().username))
+        username = current_user().username
+        return redirect(url_for('timeline_view', username=username))
 
 
 # 显示登录界面的函数  GET
@@ -130,8 +131,13 @@ def timeline_view(username):
         u.fan_count = len(Follow.query.filter_by(followed_id=u.id).all())
         u.save()
         fans_id_list = get_fan(user_now.id)
-        return render_template('timeline.html', blogs=blogs, user_now=user_now, user=u,
-                               fans_id_list=fans_id_list)
+        d = dict(
+            blogs=blogs,
+            user_now=user_now,
+            user=u,
+            fans_id_list=fans_id_list
+        )
+        return render_template('timeline.html', **d)
 
 
 # 显示 博客 的页面  GET
