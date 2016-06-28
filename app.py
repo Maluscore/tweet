@@ -124,18 +124,16 @@ def timeline_view(username):
     if user_now is None:
         abort(401)
     else:
+        log('看个人主页')
         blogs = u.blogs
         blogs.sort(key=lambda t: t.created_time, reverse=True)
-        log('看个人主页')
-        u.follow_count = len(Follow.query.filter_by(user_id=u.id).all())
-        u.fan_count = len(Follow.query.filter_by(followed_id=u.id).all())
-        u.save()
+        fan_follow_count(u)
         fans_id_list = get_fan(user_now.id)
         d = dict(
             blogs=blogs,
             user_now=user_now,
             user=u,
-            fans_id_list=fans_id_list
+            fans_id_list=fans_id_list,
         )
         return render_template('timeline.html', **d)
 
@@ -158,8 +156,13 @@ def blog_view(blog_id):
             else:
                 blog_comments.append(x)
         log('看博客')
-        return render_template('blog_view.html', user_now=user_now, blog_comments=blog_comments, blog=blog,
-                               reply_comments=reply_comments)
+        d = dict(
+            user_now=user_now,
+            blog_comments=blog_comments,
+            blog=blog,
+            reply_comments=reply_comments,
+        )
+        return render_template('blog_view.html', **d)
 
 
 # 显示 写博客 的页面 GET
@@ -216,7 +219,11 @@ def users_view():
         return redirect(url_for('login_view'))
     else:
         log('看所有用户')
-        return render_template('all_users.html', user_now=user_now, all_users=all_users)
+        d = dict(
+            user_now=user_now,
+            all_users=all_users,
+        )
+        return render_template('all_users.html', **d)
 
 
 # 显示 编辑用户 的界面 GET
@@ -269,7 +276,11 @@ def blog_update_view(blog_id):
     if user_now is None:
         abort(401)
     else:
-        return render_template('blog_update.html', user_now=user_now, blog=blog)
+        d = dict(
+            user_now=user_now,
+            blog=blog,
+        )
+        return render_template('blog_update.html', **d)
 
 
 # 处理 更新 博客的请求 POST
@@ -311,7 +322,11 @@ def follow_view(user_id):
     else:
         log('看关注用户')
         follow_users.sort(key=lambda t: t.created_time, reverse=True)
-        return render_template('follow_users.html', user_now=user_now, follow_users=follow_users)
+        d = dict(
+            user_now=user_now,
+            follow_users=follow_users,
+        )
+        return render_template('follow_users.html', **d)
 
 
 # 显示 粉丝列表 的界面 GET
@@ -325,7 +340,11 @@ def fan_view(user_id):
     else:
         log('看粉丝用户')
         fan_users.sort(key=lambda t: t.created_time, reverse=True)
-        return render_template('fan_users.html', user_now=user_now, fan_users=fan_users)
+        d = dict(
+            user_now=user_now,
+            fan_users=fan_users,
+        )
+        return render_template('fan_users.html', **d)
 
 
 # 处理 关注用户 的请求 GET
@@ -372,8 +391,13 @@ def reply_view(comment_id):
         user = User.query.filter_by(username=comment.sender_name).first()
         all_comments.sort(key=lambda t: t.created_time, reverse=True)
         log('查看回复')
-        return render_template('reply_view.html', comment=comment, user=user, all_comments=all_comments,
-                               user_now=user_now)
+        d = dict(
+            comment=comment,
+            user=user,
+            all_comments=all_comments,
+            user_now=user_now,
+        )
+        return render_template('reply_view.html', **d)
 
 
 # 处理 回复评论 的页面 POST
