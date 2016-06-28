@@ -7,6 +7,7 @@ from flask import abort
 from flask import flash
 from flask import session
 from my_log import log
+from functools import wraps
 
 from models import User
 from models import Blog
@@ -15,7 +16,7 @@ from models import Follow
 
 app = Flask(__name__)
 app.secret_key = 'peng'
-not_admin = 2
+admin = 1
 
 
 # 通过 session 来获取当前登录的用户
@@ -45,13 +46,24 @@ def fan_follow_count(user):
     return True
 
 
+# 判断登录权限
+def requires_login(f):
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        # f 是被装饰的函数
+        # 所以下面两行会先于被装饰的函数内容调用
+        print('debug, requires_login')
+        if current_user() is None:
+            return redirect(url_for('login_view'))
+        return f(*args, **kwargs)
+    return wrapped
+
+
 @app.route('/')
+@requires_login
 def index():
-    if current_user() is None:
-        return redirect(url_for('login_view'))
-    else:
-        username = current_user().username
-        return redirect(url_for('timeline_view', username=username))
+    username = current_user().username
+    return redirect(url_for('timeline_view', username=username))
 
 
 # 显示登录界面的函数  GET
@@ -79,13 +91,10 @@ def login():
 
 # 处理登出的请求 GET
 @app.route('/logout', methods=['GET'])
+@requires_login
 def logout():
-    user_now = current_user()
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        session.pop('user_id')
-        return redirect(url_for('login_view'))
+    session.pop('user_id')
+    return redirect(url_for('login_view'))
 
 
 @app.route('/register')
@@ -111,119 +120,104 @@ def register():
 
 # 显示某个用户的主页  GET
 @app.route('/timeline/<username>')
+@requires_login
 def timeline_view(username):
     u = User.query.filter_by(username=username).first()
-    # 为了给模板传参，确定是否为当前用户，就能判断是否显示欢迎语
     user_now = current_user()
-    # uu = User.query.filter_by(id=100).all()
-    # log('changdu',len(uu)) 测试没有的话就会返回0的长度
     log(u)
     if u is None:
         # 找不到就返回 404, 这是 flask 的默认 404 用法
         abort(404)
-    if user_now is None:
-        abort(401)
-    else:
-        log('看个人主页')
-        blogs = u.blogs
-        blogs.sort(key=lambda t: t.created_time, reverse=True)
-        fan_follow_count(u)
-        fans_id_list = get_fan(user_now.id)
-        d = dict(
-            blogs=blogs,
-            user_now=user_now,
-            user=u,
-            fans_id_list=fans_id_list,
-        )
-        return render_template('timeline.html', **d)
+    log('看个人主页')
+    blogs = u.blogs
+    blogs.sort(key=lambda t: t.created_time, reverse=True)
+    fan_follow_count(u)
+    fans_id_list = get_fan(user_now.id)
+    d = dict(
+        blogs=blogs,
+        user_now=user_now,
+        user=u,
+        fans_id_list=fans_id_list,
+    )
+    return render_template('timeline.html', **d)
 
 
 # 显示 博客 的页面  GET
 @app.route('/blog/<blog_id>', methods=['GET'])
+@requires_login
 def blog_view(blog_id):
     user_now = current_user()
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        blog = Blog.query.filter_by(id=blog_id).first()
-        comments = blog.comments
-        comments.sort(key=lambda t: t.created_time, reverse=True)
-        blog_comments = []
-        reply_comments = []
-        for x in comments:
-            if x.reply_id != 0:
-                reply_comments.append(x)
-            else:
-                blog_comments.append(x)
-        log('看博客')
-        d = dict(
-            user_now=user_now,
-            blog_comments=blog_comments,
-            blog=blog,
-            reply_comments=reply_comments,
-        )
-        return render_template('blog_view.html', **d)
+    blog = Blog.query.filter_by(id=blog_id).first()
+    comments = blog.comments
+    comments.sort(key=lambda t: t.created_time, reverse=True)
+    blog_comments = []
+    reply_comments = []
+    for x in comments:
+        if x.reply_id != 0:
+            reply_comments.append(x)
+        else:
+            blog_comments.append(x)
+    log('看博客')
+    d = dict(
+        user_now=user_now,
+        blog_comments=blog_comments,
+        blog=blog,
+        reply_comments=reply_comments,
+    )
+    return render_template('blog_view.html', **d)
 
 
 # 显示 写博客 的页面 GET
 @app.route('/blog/add', methods=['GET'])
+@requires_login
 def blog_add_view():
     user_now = current_user()
     log('写博客')
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        return render_template('blog_add.html', user_now=user_now)
+    return render_template('blog_add.html', user_now=user_now)
 
 
 # 处理 写博客 的请求 POST
 @app.route('/blog/add', methods=['POST'])
+@requires_login
 def blog_add():
     user_now = current_user()
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        blog = Blog(request.form)
-        blog.user = user_now
-        blog.save()
-        log('发布成功')
-        return redirect(url_for('timeline_view', username=user_now.username))
+    blog = Blog(request.form)
+    blog.user = user_now
+    blog.save()
+    log('发布成功')
+    return redirect(url_for('timeline_view', username=user_now.username))
 
 
 # 处理 发送 评论的函数  POST
 @app.route('/comment/add/<blog_id>', methods=['POST'])
+@requires_login
 def comment_add(blog_id):
     user_now = current_user()
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        c = Comment(request.form)
-        # 设置是谁发的
-        c.sender_name = user_now.username
-        c.blog = Blog.query.filter_by(id=blog_id).first()
-        # 保存到数据库
-        c.save()
-        blog = c.blog
-        blog.com_count = len(Comment.query.filter_by(blog_id=blog.id).all())
-        blog.save()
-        log('写评论')
-        return redirect(url_for('blog_view', blog_id=blog_id))
+    c = Comment(request.form)
+    # 设置是谁发的
+    c.sender_name = user_now.username
+    c.blog = Blog.query.filter_by(id=blog_id).first()
+    # 保存到数据库
+    c.save()
+    blog = c.blog
+    blog.com_count = len(Comment.query.filter_by(blog_id=blog.id).all())
+    blog.save()
+    log('写评论')
+    return redirect(url_for('blog_view', blog_id=blog_id))
 
 
 # 显示 用户列表 的界面 GET
 @app.route('/users/list')
+@requires_login
 def users_view():
     user_now = current_user()
     all_users = User.query.all()
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        log('看所有用户')
-        d = dict(
-            user_now=user_now,
-            all_users=all_users,
-        )
-        return render_template('all_users.html', **d)
+    log('看所有用户')
+    d = dict(
+        user_now=user_now,
+        all_users=all_users,
+    )
+    return render_template('all_users.html', **d)
 
 
 # 显示 编辑用户 的界面 GET
@@ -234,7 +228,7 @@ def user_update_view(user_id):
         abort(404)
     # 获取当前登录的用户, 如果用户没登录, 就返回 401 错误
     user_now = current_user()
-    if user_now is None or user_now.role == not_admin:
+    if user_now is None or user_now.role != admin:
         abort(401)
     else:
         return render_template('user_edit.html', user_now=user_now, user=u)
@@ -248,7 +242,7 @@ def user_update(user_id):
         abort(404)
     # 获取当前登录的用户, 如果用户没登录或者用户不是这条微博的主人, 就返回 401 错误
     user_now = current_user()
-    if user_now is None or user_now.role == not_admin:
+    if user_now is None or user_now.role != admin:
         abort(401)
     else:
         if u.update(request.form):
@@ -261,7 +255,7 @@ def user_update(user_id):
 def user_delete(user_id):
     u = User.query.filter_by(id=user_id).first()
     user_now = current_user()
-    if user_now is None or user_now.role == not_admin:
+    if user_now is None or user_now.role != admin:
         abort(401)
     else:
         u.delete()
@@ -270,46 +264,40 @@ def user_delete(user_id):
 
 # 显示 更新 博客的页面 GET
 @app.route('/blog/update/<blog_id>', methods=['GET'])
+@requires_login
 def blog_update_view(blog_id):
     user_now = current_user()
     blog = Blog.query.filter_by(id=blog_id).first()
-    if user_now is None:
-        abort(401)
-    else:
-        d = dict(
-            user_now=user_now,
-            blog=blog,
-        )
-        return render_template('blog_update.html', **d)
+    d = dict(
+        user_now=user_now,
+        blog=blog,
+    )
+    return render_template('blog_update.html', **d)
 
 
 # 处理 更新 博客的请求 POST
 @app.route('/blog/update/<blog_id>', methods=['POST'])
+@requires_login
 def blog_update(blog_id):
-    user_now = current_user()
     blog = Blog.query.filter_by(id=blog_id).first()
-    if user_now is None:
-        abort(401)
-    else:
-        blog.update(request.form)
-        blog.save()
-        return redirect(url_for('blog_view', blog_id=blog_id))
+    blog.update(request.form)
+    blog.save()
+    return redirect(url_for('blog_view', blog_id=blog_id))
 
 
 # 处理 删除 博客的请求 GET
 @app.route('/blog/delete/<blog_id>', methods=['GET'])
+@requires_login
 def blog_delete(blog_id):
     user_now = current_user()
     blog = Blog.query.filter_by(id=blog_id).first()
-    if user_now is None:
-        abort(401)
-    else:
-        blog.delete()
-        return redirect(url_for('timeline_view', username=user_now.username))
+    blog.delete()
+    return redirect(url_for('timeline_view', username=user_now.username))
 
 
 # 显示 关注列表 的界面 GET
 @app.route('/follow/list/<user_id>')
+@requires_login
 def follow_view(user_id):
     user_now = current_user()
     all_follows = Follow.query.filter_by(user_id=user_id).all()
@@ -317,87 +305,76 @@ def follow_view(user_id):
     follow_users = []
     for i in follow_users_id:
         follow_users.append(User.query.filter_by(id=i).first())
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        log('看关注用户')
-        follow_users.sort(key=lambda t: t.created_time, reverse=True)
-        d = dict(
-            user_now=user_now,
-            follow_users=follow_users,
-        )
-        return render_template('follow_users.html', **d)
+    log('看关注用户')
+    follow_users.sort(key=lambda t: t.created_time, reverse=True)
+    d = dict(
+        user_now=user_now,
+        follow_users=follow_users,
+    )
+    return render_template('follow_users.html', **d)
 
 
 # 显示 粉丝列表 的界面 GET
 @app.route('/fan/list/<user_id>')
+@requires_login
 def fan_view(user_id):
     user_now = current_user()
     all_fans = Follow.query.filter_by(followed_id=user_id).all()
     fan_users = [x.follows for x in all_fans]
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        log('看粉丝用户')
-        fan_users.sort(key=lambda t: t.created_time, reverse=True)
-        d = dict(
-            user_now=user_now,
-            fan_users=fan_users,
-        )
-        return render_template('fan_users.html', **d)
+    log('看粉丝用户')
+    fan_users.sort(key=lambda t: t.created_time, reverse=True)
+    d = dict(
+        user_now=user_now,
+        fan_users=fan_users,
+    )
+    return render_template('fan_users.html', **d)
 
 
 # 处理 关注用户 的请求 GET
 @app.route('/follow/<user_id>')
+@requires_login
 def follow_act(user_id):
     user_now = current_user()
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        u = User.query.filter_by(id=user_id).first()
-        f = Follow()
-        f.user_id = user_now.id
-        f.followed_id = user_id
-        f.save()
-        log('关注成功')
-        fan_follow_count(user_now)
-        return redirect(url_for('timeline_view', username=u.username))
+    u = User.query.filter_by(id=user_id).first()
+    f = Follow()
+    f.user_id = user_now.id
+    f.followed_id = user_id
+    f.save()
+    log('关注成功')
+    fan_follow_count(user_now)
+    return redirect(url_for('timeline_view', username=u.username))
 
 
 # 处理 取消关注 的请求 GET
 @app.route('/unfollow/<user_id>')
+@requires_login
 def unfollow_act(user_id):
     user_now = current_user()
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        u = User.query.filter_by(id=user_id).first()
-        f = Follow().query.filter_by(user_id=user_now.id, followed_id=user_id).first()
-        f.delete()
-        log('取消关注成功')
-        fan_follow_count(user_now)
-        return redirect(url_for('timeline_view', username=u.username))
+    u = User.query.filter_by(id=user_id).first()
+    f = Follow().query.filter_by(user_id=user_now.id, followed_id=user_id).first()
+    f.delete()
+    log('取消关注成功')
+    fan_follow_count(user_now)
+    return redirect(url_for('timeline_view', username=u.username))
 
 
 # 显示 回复评论 的页面 GET
 @app.route('/reply/add/<comment_id>')
+@requires_login
 def reply_view(comment_id):
     user_now = current_user()
-    if user_now is None:
-        return redirect(url_for('login_view'))
-    else:
-        comment = Comment.query.filter_by(id=comment_id).first()
-        all_comments = Comment.query.filter_by(reply_id=comment_id).all()
-        user = User.query.filter_by(username=comment.sender_name).first()
-        all_comments.sort(key=lambda t: t.created_time, reverse=True)
-        log('查看回复')
-        d = dict(
-            comment=comment,
-            user=user,
-            all_comments=all_comments,
-            user_now=user_now,
-        )
-        return render_template('reply_view.html', **d)
+    comment = Comment.query.filter_by(id=comment_id).first()
+    all_comments = Comment.query.filter_by(reply_id=comment_id).all()
+    user = User.query.filter_by(username=comment.sender_name).first()
+    all_comments.sort(key=lambda t: t.created_time, reverse=True)
+    log('查看回复')
+    d = dict(
+        comment=comment,
+        user=user,
+        all_comments=all_comments,
+        user_now=user_now,
+    )
+    return render_template('reply_view.html', **d)
 
 
 # 处理 回复评论 的页面 POST
