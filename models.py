@@ -24,7 +24,10 @@ def local_time(unix_time):
 
 
 def convert_to_sha1(pwd):
-    return hashlib.sha1(pwd.encode('utf-8')).hexdigest()
+    if len(pwd) <= 6:
+        return 'too-short!'
+    else:
+        return hashlib.sha1(pwd.encode('utf-8')).hexdigest()
 
 
 # 数据库里面的一张表，是一个类
@@ -65,14 +68,14 @@ class User(db.Model):
     # 验证注册用户的合法性的，应该还要添加防止用户名重复的情况
     def valid(self):
         username_len = len(self.username) >= 3
-        # password_len = len(self.password) >= 3
+        password_len = self.password != 'too-short!'
         all_users = User.query.all()
         users = [x.username for x in all_users]
         if self.username not in users:
             username_unique = True
         else:
             username_unique = False
-        return username_len and username_unique
+        return username_len and password_len and username_unique
 
     def validate(self, user):
         if isinstance(user, User):
