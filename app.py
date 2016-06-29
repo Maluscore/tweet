@@ -320,7 +320,7 @@ def follow_view(user_id):
 @app.route('/fan/list/<user_id>')
 @requires_login
 def fan_view(user_id):
-    # user_now = current_user()
+    user_now = current_user()
     user = User.query.filter_by(id=user_id).first()
     all_fans = Follow.query.filter_by(followed_id=user_id).all()
     fan_users = [x.follows for x in all_fans]
@@ -329,7 +329,7 @@ def fan_view(user_id):
     d = dict(
         user_now=user_now,
         fan_users=fan_users,
-        user = user,
+        user=user,
     )
     return render_template('fan_users.html', **d)
 
