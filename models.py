@@ -24,7 +24,7 @@ def local_time(unix_time):
 
 
 def convert_to_sha1(pwd):
-    if len(pwd) <= 6:
+    if len(pwd) < 3:
         return 'too-short!'
     else:
         return hashlib.sha1(pwd.encode('utf-8')).hexdigest()

@@ -300,6 +300,7 @@ def blog_delete(blog_id):
 @requires_login
 def follow_view(user_id):
     user_now = current_user()
+    user = User.query.filter_by(id=user_id).first()
     all_follows = Follow.query.filter_by(user_id=user_id).all()
     follow_users_id = [x.followed_id for x in all_follows]
     follow_users = []
@@ -310,6 +311,7 @@ def follow_view(user_id):
     d = dict(
         user_now=user_now,
         follow_users=follow_users,
+        user=user
     )
     return render_template('follow_users.html', **d)
 
@@ -318,7 +320,8 @@ def follow_view(user_id):
 @app.route('/fan/list/<user_id>')
 @requires_login
 def fan_view(user_id):
-    user_now = current_user()
+    # user_now = current_user()
+    user = User.query.filter_by(id=user_id).first()
     all_fans = Follow.query.filter_by(followed_id=user_id).all()
     fan_users = [x.follows for x in all_fans]
     log('看粉丝用户')
@@ -326,6 +329,7 @@ def fan_view(user_id):
     d = dict(
         user_now=user_now,
         fan_users=fan_users,
+        user = user,
     )
     return render_template('fan_users.html', **d)
 
